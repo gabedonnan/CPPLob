@@ -48,8 +48,6 @@ class LimitOrderBook {
         std::map<int, LimitLevel*> asks;
         std::unordered_map<int, Order*> orders;
         int order_id = 0;
-    public:
-        LimitOrderBook() {}
 
         std::map<int, LimitLevel*>* _get_side(bool is_bid) {
             // Return pointer to the bid or ask tree based on whether an order is a bid or ask
@@ -89,6 +87,8 @@ class LimitOrderBook {
                 }
             }
         }
+    public:
+        LimitOrderBook() {}
 
         LimitLevel* get_best_ask() {
             if (!asks.empty() ) {
@@ -111,10 +111,12 @@ class LimitOrderBook {
                 return;
             }
 
-            int order_multiplier = (order->is_bid) ? 1 : -1;
-            int matched_order_multiplier = (order->is_bid) ? -1 : 1;
+            // int order_multiplier = (order->is_bid) ? 1 : -1;
+            // int matched_order_multiplier = (order->is_bid) ? -1 : 1;
+
             Order head_order;
             while (best_value->quantity > 0 && order->quantity > 0) {
+                // The value of the head of the LimitLevel's linked list
                 int head_order_id = best_value->orders->head->value;
 
                 if (orders.count(head_order_id)) {
@@ -151,8 +153,10 @@ class LimitOrderBook {
                 LimitLevel *price_level = (*order_tree)[orders[id]->price];
                 price_level->quantity -= orders[id]->quantity;
                 if (price_level->quantity <= 0) {
+                    delete (*order_tree)[price_level->price];
                     order_tree->erase(price_level->price);
                 }
+                delete orders[id];
                 orders.erase(id);
             }
         }
