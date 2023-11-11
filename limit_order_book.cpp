@@ -10,10 +10,10 @@ struct Trader {
 };
 
 struct Order final {
-    bool is_bid = false;
-    int quantity = 0;
-    int price = 0;
-    int id = 0;
+    bool is_bid;
+    int quantity;
+    int price;
+    int id;
 };
 
 class LimitLevel final {
@@ -29,6 +29,10 @@ class LimitLevel final {
             quantity = order->quantity;
         }
 
+        ~LimitLevel() {
+            delete orders;
+        }
+
         void append(Order *order) {
             orders->append(order->quantity);
         }
@@ -38,7 +42,10 @@ class LimitLevel final {
         }
 
         int pop_left() {
-            return orders->pop_left()->value;
+            Node* _node = orders->pop_left();
+            int node_val = _node->value;
+            delete _node;
+            return node_val;
         }
 };
 
@@ -87,24 +94,6 @@ class LimitOrderBook {
                 }
             }
         }
-    public:
-        LimitOrderBook() {}
-
-        LimitLevel* get_best_ask() {
-            if (!asks.empty() ) {
-                return asks[asks.rbegin()->first];
-            } else {
-                return nullptr;
-            }
-        }
-
-        LimitLevel* get_best_bid() {
-            if (!bids.empty()) {
-                return bids[bids.begin()->first];
-            } else {
-                return nullptr;
-            }
-        }
 
         void _match_orders(Order *order, LimitLevel *best_value) {
             if (best_value == nullptr) {
@@ -125,7 +114,9 @@ class LimitOrderBook {
                     best_value->pop_left();
                     continue;
                 }
-                // break;
+
+                std::cout << order->quantity << " " << head_order.quantity << std::endl;
+
                 if (order->quantity <= head_order.quantity) {
                     head_order.quantity -= order->quantity;
                     best_value->quantity -= order->quantity;
@@ -135,6 +126,8 @@ class LimitOrderBook {
                     order->quantity -= head_order.quantity;
                     head_order.quantity = 0;
                 }
+
+                std::cout << order->quantity << " " << head_order.quantity << std::endl;
 
                 if (order->quantity == 0 && orders.count(order->id)) {
                     cancel(order->id);
@@ -147,16 +140,41 @@ class LimitOrderBook {
             }
         }
 
+    public:
+        LimitOrderBook() {}
+
+        LimitLevel* get_best_ask() {
+            if (!asks.empty()) {
+                std::cout << "best_ask " << asks.rbegin()->first << std::endl;
+                return asks.rbegin()->second;
+            } else {
+                return nullptr;
+            }
+        }
+
+        LimitLevel* get_best_bid() {
+            if (!bids.empty()) {
+                std::cout << "best bid " << bids.begin()->first << std::endl;
+                return bids.begin()->second;
+            } else {
+                return nullptr;
+            }
+        }
+
         void cancel(int id) {
             if (orders.count(id)) {
-                std::map<int, LimitLevel*> *order_tree = _get_side(orders[id]->is_bid);
-                LimitLevel *price_level = (*order_tree)[orders[id]->price];
-                price_level->quantity -= orders[id]->quantity;
+                Order* current_order = orders[id];
+                std::map<int, LimitLevel*> *order_tree = _get_side(current_order->is_bid);
+                LimitLevel *price_level = (*order_tree)[current_order->price];
+                price_level->quantity -= current_order->quantity;
                 if (price_level->quantity <= 0) {
+                    // Delete the LimitLevel memory from the order tree
                     delete (*order_tree)[price_level->price];
+
+                    // Delete mapping for LimitLevel from order tree
                     order_tree->erase(price_level->price);
                 }
-                delete orders[id];
+                delete current_order;
                 orders.erase(id);
             }
         }
@@ -185,18 +203,23 @@ class LimitOrderBook {
             return order_id - 1;
         }
 
-        int bid_quantity() {
-            return bids[100]->quantity;
+        int bid_quantity(int price) {
+            // Returns the quantity of bids at a given price
+            if (bids.count(price)) {
+                return bids[price]->quantity;
+            }
+            return 0;
         }
 };
 
 int main() {
   Order order;
   LimitOrderBook book = LimitOrderBook();
-  book.bid(10, 10);
-  book.ask(10, 10);
-  book.bid(100, 100);
-  book.ask(10, 100);
-  book.ask(30, 100);
-  std::cout << book.bid_quantity();
+  book.bid(1, 11);
+  book.cancel(0);
+  book.ask(1, 11);
+
+  book.get_best_ask();
+  book.get_best_bid();
+  std::cout << book.bid_quantity(11);
 }

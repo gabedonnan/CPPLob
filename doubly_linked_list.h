@@ -1,8 +1,8 @@
 
 struct Node {
-    int value;
-    Node *prev;
-    Node *next;
+    int value = 0;
+    Node *prev = nullptr;
+    Node *next = nullptr;
 };
 
 class DoublyLinkedList {
@@ -12,6 +12,18 @@ class DoublyLinkedList {
         int length = 0;
 
         DoublyLinkedList() {}
+
+        ~DoublyLinkedList() {
+            Node* head_ptr = head;
+            Node* next_ptr;
+            while (head_ptr != nullptr) {
+                next_ptr = head_ptr->next;
+                delete head_ptr;
+                head_ptr = next_ptr;
+            }
+            head = nullptr;
+            tail = nullptr;
+        }
 
         void append(Node *node) {
             if (tail == nullptr) {
@@ -26,9 +38,9 @@ class DoublyLinkedList {
         }
 
         void append(int value) {
-            Node node;
-            node.value = value;
-            this->append(&node);
+            Node *node = new Node();
+            node->value = value;
+            append(node);
         }
 
         void append_left(Node *node) {
@@ -44,9 +56,9 @@ class DoublyLinkedList {
         }
 
         void append_left(int value) {
-            Node node;
-            node.value = value;
-            this->append_left(&node);
+            Node *node = new Node();
+            node->value = value;
+            append_left(node);
         }
 
         Node* pop() {
