@@ -10,20 +10,20 @@ struct Trader {
 };
 
 struct Order final {
-    bool is_bid;
+    const bool is_bid;
     int quantity;
-    int price;
-    int id;
+    const int price;
+    const int id;
+    Order (const bool _is_bid, int _quantity, const int _price, const int _id) : is_bid(_is_bid), quantity(_quantity), price(_price), id(_id) {}
 };
 
 class LimitLevel final {
     public:
-        int price;
+        const int price;
         DoublyLinkedList *orders;
         int quantity;
 
-        LimitLevel(Order *order) {
-            price = order->price;
+        LimitLevel(Order *order) : price(order->price) {
             orders = new DoublyLinkedList();
             orders->append(order->id);
             quantity = order->quantity;
@@ -102,40 +102,43 @@ class LimitOrderBook {
 
             // int order_multiplier = (order->is_bid) ? 1 : -1;
             // int matched_order_multiplier = (order->is_bid) ? -1 : 1;
-
-            Order head_order;
+            Order* head_order = nullptr;
             while (best_value->quantity > 0 && order->quantity > 0) {
                 // The value of the head of the LimitLevel's linked list
                 int head_order_id = best_value->orders->head->value;
 
                 if (orders.count(head_order_id)) {
-                    head_order = *orders[head_order_id];
+                    head_order = orders[head_order_id];
                 } else {
+                    // Already manages the deletion of loose pointers
                     best_value->pop_left();
                     continue;
                 }
 
-                std::cout << order->quantity << " " << head_order.quantity << std::endl;
-
-                if (order->quantity <= head_order.quantity) {
-                    head_order.quantity -= order->quantity;
+                if (order->quantity <= head_order->quantity) {
+                    head_order->quantity -= order->quantity;
                     best_value->quantity -= order->quantity;
                     order->quantity = 0;
                 } else {
-                    best_value->quantity -= head_order.quantity;
-                    order->quantity -= head_order.quantity;
-                    head_order.quantity = 0;
+                    best_value->quantity -= head_order->quantity;
+                    order->quantity -= head_order->quantity;
+                    head_order->quantity = 0;
                 }
-
-                std::cout << order->quantity << " " << head_order.quantity << std::endl;
 
                 if (order->quantity == 0 && orders.count(order->id)) {
                     cancel(order->id);
                 }
 
-                if (head_order.quantity == 0 && orders.count(head_order_id)) {
+                if (head_order->quantity == 0 && orders.count(head_order_id)) {
                     _pop_limit(best_value);
                     orders.erase(head_order_id);
+                }
+
+                if (best_value->quantity == 0) {
+                    std::map<int, LimitLevel*> *order_tree = _get_side(!(order->is_bid));
+                    if (order_tree->count(best_value->price)) {
+                        order_tree->erase(best_value->price);
+                    }
                 }
             }
         }
@@ -145,7 +148,6 @@ class LimitOrderBook {
 
         LimitLevel* get_best_ask() {
             if (!asks.empty()) {
-                std::cout << "best_ask " << asks.rbegin()->first << std::endl;
                 return asks.rbegin()->second;
             } else {
                 return nullptr;
@@ -154,7 +156,6 @@ class LimitOrderBook {
 
         LimitLevel* get_best_bid() {
             if (!bids.empty()) {
-                std::cout << "best bid " << bids.begin()->first << std::endl;
                 return bids.begin()->second;
             } else {
                 return nullptr;
@@ -180,11 +181,7 @@ class LimitOrderBook {
         }
 
         int bid(int quantity, int price) {
-            Order *order = new Order();
-            order->is_bid = true;
-            order->quantity = quantity;
-            order->price = price;
-            order->id = order_id;
+            Order *order = new Order(true, quantity, price, order_id);
 
             order_id += 1;
             _add_order(order);
@@ -192,11 +189,7 @@ class LimitOrderBook {
         }
 
         int ask(int quantity, int price) {
-            Order *order = new Order();
-            order->is_bid = false;
-            order->quantity = quantity;
-            order->price = price;
-            order->id = order_id;
+            Order *order = new Order(false, quantity, price, order_id);
 
             order_id += 1;
             _add_order(order);
@@ -213,7 +206,6 @@ class LimitOrderBook {
 };
 
 int main() {
-  Order order;
   LimitOrderBook book = LimitOrderBook();
   book.bid(1, 11);
   book.cancel(0);
