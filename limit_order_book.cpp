@@ -5,8 +5,8 @@
 #include <queue>
 #include <stdexcept>
 #include <chrono>
-#include <mutex>
 #include <thread>
+#include <cstdlib>
 
 struct Trader {
     std::string name;
@@ -24,35 +24,30 @@ struct Order final {
 class LimitLevel final {
     public:
         const int price;
-        std::queue<int> *orders;
+        std::queue<int> orders;
         int quantity;
 
         LimitLevel(Order *order) : price(order->price), quantity(order->quantity) {
-            orders = new std::queue<int>();
-            orders->push(order->id);
-        }
-
-        ~LimitLevel() {
-            delete orders;
+            orders.push(order->id);
         }
 
         inline void append(Order *order) {
-            orders->push(order->id);
+            orders.push(order->id);
         }
 
         inline void append(int _id) {
-            orders->push(_id);
+            orders.push(_id);
         }
 
         inline int pop_left() {
-            int val = orders->front();
-            orders->pop();
+            int val = orders.front();
+            orders.pop();
             return val;
         }
 
         inline int get_head() {
             if (get_length()) {
-                return orders->front();
+                return orders.front();
             } else {
                 throw std::length_error("Head attempted to be accessed from LimitLevel of length 0");
             }
@@ -60,14 +55,14 @@ class LimitLevel final {
 
         inline int get_tail() {
             if (get_length()) {
-                return orders->back();
+                return orders.back();
             } else {
                 throw std::length_error("Tail attempted to be accessed from LimitLevel of length 0");
             }
         }
 
         inline int get_length() {
-            return orders->size();
+            return orders.size();
         }
 };
 
@@ -75,10 +70,7 @@ class LimitOrderBook final {
     private:
         std::map<int, LimitLevel*> bids;
         std::map<int, LimitLevel*> asks;
-        std::mutex order_id_mutex;
-        std::mutex match_mutex;
-        std::mutex cancel_mutex;
-        std::mutex limit_level_add_mutex;
+
         int order_id = 0;
 
         inline std::map<int, LimitLevel*>* _get_side(bool is_bid) {
@@ -110,15 +102,14 @@ class LimitOrderBook final {
                 return;
             }
 
-            if (order->quantity > 0) {
-                orders.insert_or_assign(order->id, order);
-                limit_level_add_mutex.lock();
+            if (order != nullptr && order->quantity > 0) {
+                orders.insert(std::make_pair(order->id, order));  // Segfault here with map's at function
+
                 if (order_tree->count(order->price)) {
                     _append_limit(order_tree->at(order->price), order);
                 } else {
-                    order_tree->insert_or_assign(order->price, new LimitLevel(order));
+                    order_tree->insert(std::make_pair(order->price, new LimitLevel(order)));
                 }
-                limit_level_add_mutex.unlock();
             }
         }
 
@@ -130,7 +121,7 @@ class LimitOrderBook final {
             // int order_multiplier = (order->is_bid) ? 1 : -1;
             // int matched_order_multiplier = (order->is_bid) ? -1 : 1;
             Order* head_order = nullptr;
-            match_mutex.lock();
+
             while (best_value->quantity > 0 && order->quantity > 0 && best_value->get_length() > 0) {
                 // The value of the head of the LimitLevel's linked list
                 int head_order_id = best_value->get_head();
@@ -169,7 +160,6 @@ class LimitOrderBook final {
                     }
                 }
             }
-            match_mutex.unlock();
         }
 
     public:
@@ -194,7 +184,6 @@ class LimitOrderBook final {
         }
 
         inline void cancel(int id) {
-            cancel_mutex.lock();
             if (orders.count(id)) {
                 Order* current_order = orders.at(id);
                 std::map<int, LimitLevel*> *order_tree = _get_side(current_order->is_bid);
@@ -213,28 +202,21 @@ class LimitOrderBook final {
                 delete current_order;
                 orders.erase(id);
             }
-            cancel_mutex.unlock();
         }
 
         inline int bid(int quantity, int price) {
-            order_id_mutex.lock();
-
             Order *order = new Order(true, quantity, price, order_id);
             int _oid = order_id;  // Save order id from order
             order_id += 1;
-            order_id_mutex.unlock();
 
             _add_order(order);
             return _oid;  // Dont return order->id in case it has been deleted
         }
 
         inline int ask(int quantity, int price) {
-            order_id_mutex.lock();
-
             Order *order = new Order(false, quantity, price, order_id);
             int _oid = order_id;  // Save order id from order
             order_id += 1;
-            order_id_mutex.unlock();
 
             _add_order(order);
             return _oid;  // Dont return order->id in case it has been deleted
@@ -371,6 +353,29 @@ void test_threaded_add_cancel() {
     std::cout << duration.count() << " seconds taken\n";
 }
 
+void test_random_orders() {
+    LimitOrderBook book = LimitOrderBook();
+    std::srand(std::time(nullptr)); // use current time as seed for random generator
+    auto start = std::chrono::high_resolution_clock::now();
+    int num_orders = 0;
+    for (int i = 0; i < 100; i++) {
+        int next_orders = (int)(std::rand() / 10000);
+        num_orders += next_orders;
+        for (int j = 0; j < next_orders; j++) {
+            book.bid((int)(std::rand() / 100), std::rand());
+        }
+        // std::cout << num_orders;
+        next_orders = (int)(std::rand() / 10000);
+        num_orders += next_orders;
+        for (int j = 0; j < next_orders; j++) {
+            book.ask((int)(std::rand() / 100), std::rand());
+        }
+    }
+    std::cout << num_orders << "\n";
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::seconds>(end - start);
+    std::cout << duration.count() << " seconds taken\n";
+}
 
 
 int main() {
@@ -380,7 +385,8 @@ int main() {
     test_update_decreasing();
     test_update_increasing();
 
-    test_threaded_add_cancel();
+    // test_threaded_add_cancel();
+    // test_random_orders();
 
 
     // std::map<int, int> tst = {{1, 2}};
