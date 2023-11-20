@@ -1,12 +1,19 @@
-#include "doubly_linked_list.h"
+#include "doubly_linked_list.hpp"
 #include <map>
 #include <unordered_map>
 #include <iostream>
-#include <queue>
+#include <deque>
 #include <stdexcept>
 #include <chrono>
 #include <thread>
 #include <cstdlib>
+
+struct Transaction {
+    const int taker_trader_id;
+    const int maker_trader_id;
+    const int transaction_price;
+};
+
 
 class LimitLevel final {
     public:
@@ -23,7 +30,7 @@ class LimitLevel final {
             orders.append(order);
         }
 
-        Order* pop_left() {
+        inline Order* pop_left() {
             quantity -= get_head()->quantity;
             return orders.pop_left();
         }
@@ -50,6 +57,8 @@ class LimitOrderBook final {
     private:
         std::map<int, LimitLevel*> bids;
         std::map<int, LimitLevel*> asks;
+
+        std::deque<Transaction> executed_transactions;  // Use deque so it can be iterated over
 
         int order_id = 0;
 
@@ -95,11 +104,15 @@ class LimitOrderBook final {
                 // The value of the head of the LimitLevel's linked list
                 Order* head_order = best_value->get_head();
                 
+                executed_transactions.push_back({order->trader_id, head_order->trader_id, head_order->price});
+
                 if (order->quantity <= head_order->quantity) {
+                    // Decrementing quantities
                     head_order->quantity -= order->quantity;
                     best_value->quantity -= order->quantity;
                     order->quantity = 0;
                 } else {
+                    // Decrementing quantities
                     order->quantity -= head_order->quantity;
                     best_value->quantity -= head_order->quantity;
                     head_order->quantity = 0;
@@ -169,8 +182,8 @@ class LimitOrderBook final {
             }
         }
 
-        inline int bid(int quantity, int price) {
-            Order *order = new Order(true, quantity, price, order_id);
+        inline int bid(int quantity, const int price, const int trader_id = 0) {
+            Order *order = new Order(true, quantity, price, order_id, trader_id);
             int _oid = order_id;  // Save order id from order
             order_id += 1;
 
@@ -178,8 +191,8 @@ class LimitOrderBook final {
             return _oid;  // Dont return order->id in case it has been deleted
         }
 
-        inline int ask(int quantity, int price) {
-            Order *order = new Order(false, quantity, price, order_id);
+        inline int ask(int quantity, const int price, const int trader_id = 0) {
+            Order *order = new Order(false, quantity, price, order_id, trader_id);
             int _oid = order_id;  // Save order id from order
             order_id += 1;
 
@@ -196,7 +209,7 @@ class LimitOrderBook final {
         }
 
         inline int update(int id, int quantity) {
-            int new_id = -1;
+            int new_id = id;
             if (quantity == 0) {
                 cancel(id);
                 new_id = id;
@@ -216,10 +229,10 @@ class LimitOrderBook final {
 
                 } else {
                     // If quantity being increased move the order to the back of the queue
-                    if (orders.at(id)->is_bid) {
-                        new_id = bid(quantity, to_update->price);
+                    if (to_update->is_bid) {
+                        new_id = bid(quantity, to_update->price, to_update->trader_id);
                     } else {
-                        new_id = ask(quantity, to_update->price);
+                        new_id = ask(quantity, to_update->price, to_update->trader_id);
                     }
                     cancel(id);
 
@@ -239,6 +252,13 @@ class LimitOrderBook final {
             }
             std::cout << "\n";
         }
+
+        void print_executions() {
+            std::cout << "EXECUTED TXS\n";
+            for (auto const& val : executed_transactions) {
+                std::cout << "Maker ID: " << val.maker_trader_id << ", Taker ID: " << val.taker_trader_id << ", Trade Price: " << val.transaction_price << "\n";
+            }
+        }
 };
 
 
@@ -248,7 +268,7 @@ void test_adding() {
     LimitOrderBook book = LimitOrderBook();
     auto start = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < 10000000; i++) {
-        book.ask(1, 1);
+        book.ask(1, 1, 0);
     }
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::seconds>(end - start);
@@ -258,20 +278,21 @@ void test_adding() {
 void test_matching() {
     LimitOrderBook book = LimitOrderBook();
     auto start = std::chrono::high_resolution_clock::now();
-    book.bid(1,1);
+    book.bid(1,1, 0);
     for (int i = 0; i < 10000000; i++) {
-        book.bid(1,1);
-        book.ask(1,1);
+        book.bid(1,1, 0);
+        book.ask(1,1, 0);
     }
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::seconds>(end - start);
     std::cout << duration.count() << " seconds taken\n";
+    // book.print_book();
 }
 
 void test_cancellation() {
     LimitOrderBook book = LimitOrderBook();
     for (int j = 0; j < 10000000; j++) {
-        book.bid(1, 1);
+        book.bid(1, 1, 0);
     }
     auto start = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < 10000000; i++) {
@@ -285,7 +306,7 @@ void test_cancellation() {
 void test_update_decreasing() {
     LimitOrderBook book = LimitOrderBook();
     auto start = std::chrono::high_resolution_clock::now();
-    book.bid(10000001, 1);
+    book.bid(10000001, 1, 0);
     for (int i = 0; i < 10000000; i ++) {
         book.update(0, 10000001 - i);
     }
@@ -297,7 +318,7 @@ void test_update_decreasing() {
 void test_update_increasing() {
     LimitOrderBook book = LimitOrderBook();
     auto start = std::chrono::high_resolution_clock::now();
-    book.bid(1, 1);
+    book.bid(1, 1, 0);
     for (int i = 0; i < 10000000; i ++) {
         book.update(i, 2 + i);
     }
@@ -315,63 +336,58 @@ void test_random_orders() {
         int next_orders = (int)(std::rand() / 10000);
         num_orders += next_orders;
         for (int j = 0; j < next_orders; j++) {
-            book.bid((int)(std::rand() / 100), std::rand());
+            book.bid((int)(std::rand() / 100), std::rand(), 0);
         }
         // std::cout << num_orders;
         next_orders = (int)(std::rand() / 10000);
         num_orders += next_orders;
         for (int j = 0; j < next_orders; j++) {
-            book.ask((int)(std::rand() / 100), std::rand());
+            book.ask((int)(std::rand() / 100), std::rand(), 0);
         }
     }
     std::cout << num_orders << "\n";
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::seconds>(end - start);
     std::cout << duration.count() << " seconds taken\n";
-    std::cout << book.get_best_bid()->price << " " << book.get_best_ask()->price;
+    std::cout << book.get_best_bid()->price << " " << book.get_best_ask()->price << "\n";
 }
 
 void test_lob_accuracy() {
     LimitOrderBook book;
     book.print_book();
 
-    book.bid(1,1);
+    book.bid(1,1, 0);
     book.print_book();
 
-    book.bid(2,1);
+    book.bid(2,1, 1);
     book.print_book();
 
-    book.ask(4, 1);
+    book.ask(4, 1, 2);
     book.print_book();
 
-    book.bid(5, 1);
-    book.ask(5, 2);
-    book.ask(1, 3);
+    book.bid(5, 1, 3);
+    book.ask(5, 2, 4);
+    book.ask(1, 3, 3);
     book.print_book();
     
-    book.bid(10, 5);
+    book.bid(10, 5, 1);
     book.print_book();
 
     book.cancel(3);
     book.print_book();
+
+    book.print_executions();
+}
+
+void run_test_benchmarks() {
+    test_adding();
+    test_matching();
+    test_cancellation();
+    test_update_decreasing();
+    test_update_increasing();
+    test_random_orders();
 }
 
 int main() {
-    // test_matching();
-    // test_adding(); 
-    // test_cancellation();
-    // test_update_decreasing();
-    // test_update_increasing();
-    // test_random_orders();
-    test_lob_accuracy();
-
-    // std::map<int, int> tst = {{1, 2}};
-    // tst.count(nullptr)
-
-    // book.get_best_ask();
-    // book.get_best_bid();
-    // std::cout << book.bid_quantity(11);
-
-    // test_get_level_head();
-    // test_order_count();
+    run_test_benchmarks();    
 }
