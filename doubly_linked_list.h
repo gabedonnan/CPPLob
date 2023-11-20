@@ -1,97 +1,78 @@
-
-struct Node {
-    int value = 0;
-    Node *prev = nullptr;
-    Node *next = nullptr;
+struct Order final {
+    const bool is_bid;
+    int quantity;
+    const int price;
+    const int id;
+    Order *prev;
+    Order *next;
+    Order (const bool _is_bid, int _quantity, const int _price, const int _id) 
+        : is_bid(_is_bid), quantity(_quantity), price(_price), id(_id), prev(nullptr), next(nullptr) {}
 };
 
 class DoublyLinkedList {
     public:
-        Node *head = nullptr;
-        Node *tail = nullptr;
+        Order *head;
+        Order *tail;
         int length = 0;
 
-        DoublyLinkedList() {}
+        DoublyLinkedList(): tail(nullptr), head(nullptr), length(0) {}
 
         ~DoublyLinkedList() {
-            Node* head_ptr = head;
-            Node* next_ptr;
-            while (head_ptr != nullptr) {
-                next_ptr = head_ptr->next;
-                delete head_ptr;
-                head_ptr = next_ptr;
+            Order* next_ptr = nullptr;
+            while (head) {
+                next_ptr = head;
+                head = next_ptr->next;
+                delete next_ptr;
             }
-            head = nullptr;
-            tail = nullptr;
         }
 
-        void append(Node *node) {
+        DoublyLinkedList(const DoublyLinkedList & dll) = delete;
+        DoublyLinkedList& operator=(DoublyLinkedList const&) = delete;
+
+        void append(Order* order) {
             if (tail == nullptr) {
-                tail = node;
-                head = node;
+                tail = order;
+                head = order;
             } else {
-                tail->next = node;
-                node->prev = tail;
-                tail = node;
+                order->prev = tail;
+                tail = order;
+                tail->prev->next = order;
             }
             length++;
         }
 
-        void append(int value) {
-            Node *node = new Node();
-            node->value = value;
-            append(node);
-        }
+        Order* pop_left() {
+            if (head == nullptr) {
+                return nullptr;
+            }
 
-        void append_left(Node *node) {
-            if (tail == nullptr) {
-                head = node;
-                tail = node;
+            Order* res = head;
+
+            if (head == tail) {
+                head = nullptr;
+                tail = nullptr;
             } else {
-                head->prev = node;
-                node->next = head;
-                head = node;
+                head = head->next;
+                head->prev = nullptr;
             }
-            length++;
-        }
-
-        void append_left(int value) {
-            Node *node = new Node();
-            node->value = value;
-            append_left(node);
-        }
-
-        Node* pop() {
-            Node *res = nullptr;
-            if (tail != nullptr) {
-                res = tail;
-                if (length >= 2) {
-                    res->prev->next = nullptr;
-                    tail = res->prev;
-                    res->prev = nullptr;
-                } else {
-                    head = nullptr;
-                    tail = nullptr;
-                }
-            }
-            length -= 1;
+            
+            res->next = nullptr;
+            length--;
             return res;
         }
 
-        Node* pop_left() {
-            Node* res = nullptr;
-            if (head != nullptr) {
-                res = head;
-                if (length >= 2) {
-                    res->next->prev = nullptr;
-                    head = head->next;
-                    head->next = nullptr;
-                } else {
-                    head = nullptr;
-                    tail = nullptr;
-                }
+        void remove(Order* order) {
+            if (order == head) {
+                head = order->next;
+            } else {
+                order->prev->next = order->next;
             }
-            length -= 1;
-            return res;
+
+            if (order == tail) {
+                tail = order->prev;
+            } else {
+                order->next->prev = order->prev;
+            }
+            length--;
         }
 };

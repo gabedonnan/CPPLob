@@ -1,6 +1,6 @@
+#include "doubly_linked_list.h"
 #include <map>
 #include <unordered_map>
-#include <string>
 #include <iostream>
 #include <queue>
 #include <stdexcept>
@@ -8,61 +8,41 @@
 #include <thread>
 #include <cstdlib>
 
-struct Trader {
-    std::string name;
-    int balance = 0;
-};
-
-struct Order final {
-    const bool is_bid;
-    int quantity;
-    const int price;
-    const int id;
-    Order (const bool _is_bid, int _quantity, const int _price, const int _id) : is_bid(_is_bid), quantity(_quantity), price(_price), id(_id) {}
-};
-
 class LimitLevel final {
     public:
         const int price;
-        std::queue<int> orders;
+        DoublyLinkedList orders;
         int quantity;
 
         LimitLevel(Order *order) : price(order->price), quantity(order->quantity) {
-            orders.push(order->id);
+            orders.append(order);
         }
 
         inline void append(Order *order) {
-            orders.push(order->id);
+            quantity += order->quantity;
+            orders.append(order);
         }
 
-        inline void append(int _id) {
-            orders.push(_id);
+        Order* pop_left() {
+            quantity -= get_head()->quantity;
+            return orders.pop_left();
         }
 
-        inline int pop_left() {
-            int val = orders.front();
-            orders.pop();
-            return val;
+        inline void remove(Order* order) {
+            quantity -= order->quantity;
+            orders.remove(order);
         }
 
-        inline int get_head() {
-            if (get_length()) {
-                return orders.front();
-            } else {
-                throw std::length_error("Head attempted to be accessed from LimitLevel of length 0");
-            }
+        inline Order* get_head() {
+            return orders.head;
         }
 
-        inline int get_tail() {
-            if (get_length()) {
-                return orders.back();
-            } else {
-                throw std::length_error("Tail attempted to be accessed from LimitLevel of length 0");
-            }
+        inline Order* get_tail() {
+            return orders.tail;
         }
 
         inline int get_length() {
-            return orders.size();
+            return orders.length;
         }
 };
 
@@ -76,17 +56,6 @@ class LimitOrderBook final {
         inline std::map<int, LimitLevel*>* _get_side(bool is_bid) {
             // Return pointer to the bid or ask tree based on whether an order is a bid or ask
             return (is_bid) ? &bids : &asks;
-        }
-
-        inline int _pop_limit(LimitLevel *limit_level) {
-            int res = limit_level->pop_left();
-            limit_level->quantity -= orders.at(res)->quantity;
-            return res;
-        }
-
-        inline void _append_limit(LimitLevel *limit_level, Order *order) {
-            limit_level->append(order);
-            limit_level->quantity += order->quantity;
         }
 
         inline void _add_order(Order *order) {
@@ -106,7 +75,7 @@ class LimitOrderBook final {
                 orders.insert(std::make_pair(order->id, order));  // Segfault here with map's at function
 
                 if (order_tree->count(order->price)) {
-                    _append_limit(order_tree->at(order->price), order);
+                    order_tree->at(order->price)->append(order);
                 } else {
                     order_tree->insert(std::make_pair(order->price, new LimitLevel(order)));
                 }
@@ -124,15 +93,7 @@ class LimitOrderBook final {
 
             while (best_value->quantity > 0 && order->quantity > 0 && best_value->get_length() > 0) {
                 // The value of the head of the LimitLevel's linked list
-                int head_order_id = best_value->get_head();
-
-                if (orders.count(head_order_id)) {
-                    head_order = orders.at(head_order_id);
-                } else {
-                    // Already manages the deletion of loose pointers
-                    best_value->pop_left();
-                    continue;
-                }
+                Order* head_order = best_value->get_head();
                 
                 if (order->quantity <= head_order->quantity) {
                     head_order->quantity -= order->quantity;
@@ -148,17 +109,21 @@ class LimitOrderBook final {
                     cancel(order->id);
                 }
                 
-                if (head_order->quantity == 0 && orders.count(head_order_id)) {
-                    _pop_limit(best_value);
-                    orders.erase(head_order_id);
+                if (head_order->quantity == 0) {
+                    orders.erase(head_order->id);
+                    delete best_value->pop_left();  // Deletes head order as it is popped
                 }
 
-                if (best_value->quantity == 0) {
+                if (best_value->quantity == 0) {    
                     std::map<int, LimitLevel*> *order_tree = _get_side(!(order->is_bid));
                     if (order_tree->count(best_value->price)) {
                         order_tree->erase(best_value->price);
                     }
                 }
+            }
+
+            if (order != nullptr && order->quantity > 0) {
+                _add_order(order);
             }
         }
 
@@ -169,7 +134,7 @@ class LimitOrderBook final {
 
         inline LimitLevel* get_best_ask() {
             if (!asks.empty()) {
-                return asks.rbegin()->second;
+                return asks.begin()->second;
             } else {
                 return nullptr;
             }
@@ -177,7 +142,7 @@ class LimitOrderBook final {
 
         inline LimitLevel* get_best_bid() {
             if (!bids.empty()) {
-                return bids.begin()->second;
+                return bids.rbegin()->second;
             } else {
                 return nullptr;
             }
@@ -190,8 +155,8 @@ class LimitOrderBook final {
                 
                 if (order_tree->count(current_order->price)) {
                     LimitLevel *price_level = order_tree->at(current_order->price);
+                    price_level->remove(current_order);
 
-                    price_level->quantity -= current_order->quantity;
                     if (price_level->quantity <= 0) {
                         // Delete mapping for LimitLevel from order tree
                         order_tree->erase(price_level->price);
@@ -262,6 +227,18 @@ class LimitOrderBook final {
             }
             return new_id;
         }
+
+        void print_book() {
+            std::cout << "BIDS\n";
+            for (auto const& [key, val] : bids) {
+                std::cout << val->quantity << " bids at price " << key << "\n";
+            }
+            std::cout << "ASKS\n";
+            for (auto const& [key, val] : asks) {
+                std::cout << val->quantity << " asks at price " << key << "\n";
+            }
+            std::cout << "\n";
+        }
 };
 
 
@@ -329,30 +306,6 @@ void test_update_increasing() {
     std::cout << duration.count() << " seconds taken\n";
 }
 
-void thread_bidder(LimitOrderBook* book) {
-    for (int i = 0; i < 10000000; i++) {
-        book->bid(1, 1);
-    }
-}
-
-void thread_asker(LimitOrderBook* book) {
-    for (int i = 0; i < 10000000; i++) {
-        book->ask(1, 1);
-    }
-}
-
-void test_threaded_add_cancel() {
-    LimitOrderBook book = LimitOrderBook();
-    auto start = std::chrono::high_resolution_clock::now();
-    std::thread t1{thread_bidder, &book};
-    std::thread t2{thread_asker, &book};
-    t1.join();
-    t2.join();
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::seconds>(end - start);
-    std::cout << duration.count() << " seconds taken\n";
-}
-
 void test_random_orders() {
     LimitOrderBook book = LimitOrderBook();
     std::srand(std::time(nullptr)); // use current time as seed for random generator
@@ -375,19 +328,42 @@ void test_random_orders() {
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::seconds>(end - start);
     std::cout << duration.count() << " seconds taken\n";
+    std::cout << book.get_best_bid()->price << " " << book.get_best_ask()->price;
 }
 
+void test_lob_accuracy() {
+    LimitOrderBook book;
+    book.print_book();
+
+    book.bid(1,1);
+    book.print_book();
+
+    book.bid(2,1);
+    book.print_book();
+
+    book.ask(4, 1);
+    book.print_book();
+
+    book.bid(5, 1);
+    book.ask(5, 2);
+    book.ask(1, 3);
+    book.print_book();
+    
+    book.bid(10, 5);
+    book.print_book();
+
+    book.cancel(3);
+    book.print_book();
+}
 
 int main() {
-    test_matching();
-    test_adding(); 
-    test_cancellation();
-    test_update_decreasing();
-    test_update_increasing();
-
-    // test_threaded_add_cancel();
+    // test_matching();
+    // test_adding(); 
+    // test_cancellation();
+    // test_update_decreasing();
+    // test_update_increasing();
     // test_random_orders();
-
+    test_lob_accuracy();
 
     // std::map<int, int> tst = {{1, 2}};
     // tst.count(nullptr)
