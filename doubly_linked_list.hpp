@@ -1,3 +1,6 @@
+#ifndef DOUBLY_LINKED_LIST_H
+#define DOUBLY_LINKED_LIST_H
+
 struct Order final {
     const bool is_bid;
     int quantity;
@@ -77,3 +80,5 @@ class DoublyLinkedList {
             length--;
         }
 };
+
+#endif

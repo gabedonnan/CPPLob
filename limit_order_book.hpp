@@ -1,12 +1,11 @@
+#ifndef LIMIT_ORDER_BOOK_H
+#define LIMIT_ORDER_BOOK_H
+
 #include "doubly_linked_list.hpp"
 #include <map>
 #include <unordered_map>
 #include <iostream>
 #include <deque>
-#include <stdexcept>
-#include <chrono>
-#include <thread>
-#include <cstdlib>
 
 struct Transaction {
     const int taker_trader_id;
@@ -96,10 +95,6 @@ class LimitOrderBook final {
             if (best_value == nullptr) {
                 return;
             }
-
-            // int order_multiplier = (order->is_bid) ? 1 : -1;
-            // int matched_order_multiplier = (order->is_bid) ? -1 : 1;
-            Order* head_order = nullptr;
 
             while (best_value->quantity > 0 && order->quantity > 0 && best_value->get_length() > 0) {
                 // The value of the head of the LimitLevel's linked list
@@ -252,133 +247,4 @@ class LimitOrderBook final {
         }
 };
 
-
-// TESTS
-
-void test_adding() {
-    LimitOrderBook book = LimitOrderBook();
-    auto start = std::chrono::high_resolution_clock::now();
-    for (int i = 0; i < 10000000; i++) {
-        book.ask(1, 1, 0);
-    }
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::seconds>(end - start);
-    std::cout << duration.count() << " seconds taken\n";
-}
-
-void test_matching() {
-    LimitOrderBook book = LimitOrderBook();
-    auto start = std::chrono::high_resolution_clock::now();
-    book.bid(1,1, 0);
-    for (int i = 0; i < 10000000; i++) {
-        book.bid(1,1, 0);
-        book.ask(1,1, 0);
-    }
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::seconds>(end - start);
-    std::cout << duration.count() << " seconds taken\n";
-    // book.print_book();
-}
-
-void test_cancellation() {
-    LimitOrderBook book = LimitOrderBook();
-    for (int j = 0; j < 10000000; j++) {
-        book.bid(1, 1, 0);
-    }
-    auto start = std::chrono::high_resolution_clock::now();
-    for (int i = 0; i < 10000000; i++) {
-        book.cancel(i);
-    }
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::seconds>(end - start);
-    std::cout << duration.count() << " seconds taken\n";
-}
-
-void test_update_decreasing() {
-    LimitOrderBook book = LimitOrderBook();
-    auto start = std::chrono::high_resolution_clock::now();
-    book.bid(10000001, 1, 0);
-    for (int i = 0; i < 10000000; i ++) {
-        book.update(0, 10000001 - i);
-    }
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::seconds>(end - start);
-    std::cout << duration.count() << " seconds taken\n";
-}
-
-void test_update_increasing() {
-    LimitOrderBook book = LimitOrderBook();
-    auto start = std::chrono::high_resolution_clock::now();
-    book.bid(1, 1, 0);
-    for (int i = 0; i < 10000000; i ++) {
-        book.update(i, 2 + i);
-    }
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::seconds>(end - start);
-    std::cout << duration.count() << " seconds taken\n";
-}
-
-void test_random_orders() {
-    LimitOrderBook book = LimitOrderBook();
-    std::srand(std::time(nullptr)); // use current time as seed for random generator
-    auto start = std::chrono::high_resolution_clock::now();
-    int num_orders = 0;
-    for (int i = 0; i < 100; i++) {
-        int next_orders = (int)(std::rand() / 10000);
-        num_orders += next_orders;
-        for (int j = 0; j < next_orders; j++) {
-            book.bid((int)(std::rand() / 100), std::rand(), 0);
-        }
-        // std::cout << num_orders;
-        next_orders = (int)(std::rand() / 10000);
-        num_orders += next_orders;
-        for (int j = 0; j < next_orders; j++) {
-            book.ask((int)(std::rand() / 100), std::rand(), 0);
-        }
-    }
-    std::cout << num_orders << "\n";
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::seconds>(end - start);
-    std::cout << duration.count() << " seconds taken\n";
-    std::cout << book.get_best_bid()->price << " " << book.get_best_ask()->price << "\n";
-}
-
-void test_lob_accuracy() {
-    LimitOrderBook book;
-    book.print_book();
-
-    book.bid(1,1, 0);
-    book.print_book();
-
-    book.bid(2,1, 1);
-    book.print_book();
-
-    book.ask(4, 1, 2);
-    book.print_book();
-
-    book.bid(5, 1, 3);
-    book.ask(5, 2, 4);
-    book.ask(1, 3, 3);
-    book.print_book();
-    
-    book.bid(10, 5, 1);
-    book.print_book();
-
-    book.cancel(3);
-    book.print_book();
-
-    book.print_executions();
-}
-
-void run_test_benchmarks() {
-    test_adding();
-    test_matching();
-    test_cancellation();
-    test_update_decreasing();
-    test_update_increasing();
-    test_random_orders();
-}
-
-int main() {
-    run_test_benchmarks();    
-}
+#endif
