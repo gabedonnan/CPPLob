@@ -57,6 +57,7 @@ class LimitOrderBook final {
     private:
         std::map<int, LimitLevel*> bids;
         std::map<int, LimitLevel*> asks;
+        std::unordered_map<int, Order*> orders;
 
         std::deque<Transaction> executed_transactions;  // Use deque so it can be iterated over
 
@@ -141,8 +142,6 @@ class LimitOrderBook final {
         }
 
     public:
-        std::unordered_map<int, Order*> orders;
-
         LimitOrderBook() {}
 
         inline LimitLevel* get_best_ask() {
@@ -198,14 +197,6 @@ class LimitOrderBook final {
 
             _add_order(order);
             return _oid;  // Dont return order->id in case it has been deleted
-        }
-
-        inline int bid_quantity(int price) {
-            // Returns the quantity of bids at a given price
-            if (bids.count(price)) {
-                return bids[price]->quantity;
-            }
-            return 0;
         }
 
         inline int update(int id, int quantity) {
