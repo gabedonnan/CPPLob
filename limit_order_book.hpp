@@ -5,12 +5,19 @@
 #include <map>
 #include <unordered_map>
 #include <iostream>
-#include <deque>
+#include <vector>
+#include <string>
 
 struct Transaction {
-    const int taker_trader_id;
-    const int maker_trader_id;
-    const int transaction_price;
+    const int taker_id;
+    const int maker_id;
+    const int quantity;
+    const int price;
+    Transaction(const int _taker_id, const int _maker_id, const int _tx_quantity, const int _tx_price) 
+        : taker_id(_taker_id), maker_id(_maker_id), quantity(_tx_quantity), price(_tx_price) {}
+    std::string to_str() {
+        return "Transaction(maker_id=" + std::to_string(maker_id) + ", taker_id=" + std::to_string(taker_id) + ", quantity=" + std::to_string(quantity) + ", price=" + std::to_string(price) +  ")";
+    }
 };
 
 
@@ -57,9 +64,7 @@ class LimitOrderBook final {
         std::map<int, LimitLevel*> bids;
         std::map<int, LimitLevel*> asks;
         std::unordered_map<int, Order*> orders;
-
-        std::deque<Transaction> executed_transactions;  // Use deque so it can be iterated over
-
+        
         int order_id = 0;
 
         inline std::map<int, LimitLevel*>* _get_side(bool is_bid) {
@@ -99,15 +104,15 @@ class LimitOrderBook final {
             while (best_value->quantity > 0 && order->quantity > 0 && best_value->get_length() > 0) {
                 // The value of the head of the LimitLevel's linked list
                 Order* head_order = best_value->get_head();
-                
-                executed_transactions.push_back({order->trader_id, head_order->trader_id, head_order->price});
 
                 if (order->quantity <= head_order->quantity) {
+                    executed_transactions.push_back({order->trader_id, head_order->trader_id, order->quantity, head_order->price});
                     // Decrementing quantities
                     head_order->quantity -= order->quantity;
                     best_value->quantity -= order->quantity;
                     order->quantity = 0;
                 } else {
+                    executed_transactions.push_back({order->trader_id, head_order->trader_id, head_order->quantity, head_order->price});
                     // Decrementing quantities
                     order->quantity -= head_order->quantity;
                     best_value->quantity -= head_order->quantity;
@@ -137,6 +142,8 @@ class LimitOrderBook final {
         }
 
     public:
+        std::vector<Transaction> executed_transactions; 
+
         LimitOrderBook() {}
 
         inline LimitLevel* get_best_ask() {
@@ -177,21 +184,29 @@ class LimitOrderBook final {
         }
 
         inline int bid(int quantity, const int price, const int trader_id = 0) {
-            Order *order = new Order(true, quantity, price, order_id, trader_id);
-            int _oid = order_id;  // Save order id from order
-            order_id += 1;
+            if (price > 0 && quantity > 0) {
+                Order *order = new Order(true, quantity, price, order_id, trader_id);
+                int _oid = order_id;  // Save order id from order
+                order_id += 1;
 
-            _add_order(order);
-            return _oid;  // Dont return order->id in case it has been deleted
+                _add_order(order);
+                return _oid;  // Dont return order->id in case it has been deleted
+            } else {
+                return -1;  // Returns -1 if invalid order
+            }
         }
 
         inline int ask(int quantity, const int price, const int trader_id = 0) {
-            Order *order = new Order(false, quantity, price, order_id, trader_id);
-            int _oid = order_id;  // Save order id from order
-            order_id += 1;
+            if (price > 0 && quantity > 0) {
+                Order *order = new Order(false, quantity, price, order_id, trader_id);
+                int _oid = order_id;  // Save order id from order
+                order_id += 1;
 
-            _add_order(order);
-            return _oid;  // Dont return order->id in case it has been deleted
+                _add_order(order);
+                return _oid;  // Dont return order->id in case it has been deleted
+            } else {
+                return -1;  // Returns -1 if invalid order
+            }
         }
 
         inline int update(int id, int quantity) {
@@ -227,23 +242,16 @@ class LimitOrderBook final {
             return new_id;
         }
 
-        void print_book() {
-            std::cout << "BIDS\n";
+        std::string __repr__() {
+            std::string res = "BIDS\n";
             for (auto const& [key, val] : bids) {
-                std::cout << val->quantity << " bids at price " << key << "\n";
+                res += std::to_string(val->quantity) + " bids at price " + std::to_string(key) + "\n";
             }
-            std::cout << "ASKS\n";
+            res += "ASKS\n";
             for (auto const& [key, val] : asks) {
-                std::cout << val->quantity << " asks at price " << key << "\n";
+                res += std::to_string(val->quantity) + " asks at price " + std::to_string(key) + "\n";
             }
-            std::cout << "\n";
-        }
-
-        void print_executions() {
-            std::cout << "EXECUTED TXS\n";
-            for (auto const& val : executed_transactions) {
-                std::cout << "Maker ID: " << val.maker_trader_id << ", Taker ID: " << val.taker_trader_id << ", Trade Price: " << val.transaction_price << "\n";
-            }
+            return res;
         }
 };
 
