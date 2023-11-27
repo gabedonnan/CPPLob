@@ -7,6 +7,37 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <random>
+
+static int _cur_tid = 0;
+
+class Trader {
+    public:
+        const bool is_bidder;
+        const bool is_asker;
+        const int id;
+
+        Trader(const bool _bids, const bool _asks) : is_bidder(_bids), is_asker(_asks), id(_cur_tid) {
+            _cur_tid++;
+        }
+
+        const int get_order_quantity(const bool is_bid) {
+            return 1;
+        }
+
+        const int get_order_price(const bool is_bid) {
+            return 1;
+        }
+
+        std::pair<const int, const int> get_order(const bool is_bid) {
+            return std::make_pair(get_order_quantity(is_bid), get_order_price(is_bid));
+        }
+
+        std::string to_str() {
+            return "Trader(id=" + std::to_string(id) + ", is_bidder=" + std::to_string(is_bidder) + ", is_asker=" + std::to_string(is_asker) + ")";
+        }
+};
+
 
 struct Transaction {
     const int taker_id;
@@ -252,6 +283,22 @@ class LimitOrderBook final {
                 res += std::to_string(val->quantity) + " asks at price " + std::to_string(key) + "\n";
             }
             return res;
+        }
+
+        void run_experiment(int start_time, int end_time, std::vector<Trader> traders) {
+            for ( ; start_time < end_time; start_time++) {
+                for (auto& trader : traders) {
+                    if (trader.is_bidder) {
+                        std::pair<const int, const int> func_results = trader.get_order(true);
+                        bid(func_results.first, func_results.second, trader.id);
+                    } 
+                    
+                    if (trader.is_asker) {
+                        std::pair<const int, const int> func_results = trader.get_order(false);
+                        ask(func_results.first, func_results.second, trader.id);
+                    }
+                }
+            }
         }
 };
 
