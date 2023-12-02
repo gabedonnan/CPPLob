@@ -240,37 +240,33 @@ class LimitOrderBook final {
             }
         }
 
-        inline int update(int id, int quantity) {
-            int new_id = id;
+        inline void update(int id, int quantity) {
             if (quantity == 0) {
                 cancel(id);
-                new_id = id;
             } else if (orders.count(id)) {
-                std::map<int, LimitLevel*> *order_tree = _get_side(orders.at(id)->is_bid);
                 Order* to_update = orders.at(id);
+                std::map<int, LimitLevel*> *order_tree = _get_side(to_update->is_bid);
+                if (order_tree->count(to_update->price)) {
+                    LimitLevel* level = order_tree->at(to_update->price);
+                } else {
+                    return;
+                }
 
                 int quantity_difference = to_update->quantity - quantity;
 
                 if (quantity_difference >= 0) {
                     // If quantity is being decreased maintain order in price-time priority
                     to_update->quantity = quantity;
-                    if (order_tree->count(to_update->price)) {
-                        order_tree->at(to_update->price)->quantity -= quantity_difference;
-                    }
-                    new_id = id;
-
+                    level->quantity -= quantity_difference;
                 } else {
                     // If quantity being increased move the order to the back of the queue
-                    if (to_update->is_bid) {
-                        new_id = bid(quantity, to_update->price, to_update->trader_id);
-                    } else {
-                        new_id = ask(quantity, to_update->price, to_update->trader_id);
-                    }
-                    cancel(id);
+                    to_update->quantity = quantity;
+                    level->quantity -= quantity_difference;  // This is a subtraction as qdiff will be negative
 
+                    level->remove(to_update);
+                    level->append(to_update)
                 }
             }
-            return new_id;
         }
 
         std::string __repr__() {
