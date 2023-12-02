@@ -260,10 +260,10 @@ class LimitOrderBook final {
                     level->quantity -= quantity_difference;
                 } else {
                     // If quantity being increased move the order to the back of the queue
-                    to_update->quantity = quantity;
-                    level->quantity -= quantity_difference;  // This is a subtraction as qdiff will be negative
-
                     level->remove(to_update);
+                    
+                    to_update->quantity = quantity;
+
                     level->append(to_update)
                 }
             }
