@@ -8,8 +8,33 @@
 #include <vector>
 #include <string>
 #include <random>
+#include <algorithm>
 
 static int _cur_tid = 0;
+
+class ExperimentWrapper {
+    public:
+        const int start_time;
+        const int end_time;
+};
+
+template <typename T>  // T here is a Trader or subclass of trader type
+class Experiment : public ExperimentWrapper {
+    public:
+        std::vector<T> traders;
+        Experiment(const int _start_time, const int _end_time, const int _buyer_num, const int _seller_num, const int _both_num) 
+            : start_time(_start_time), end_time(_end_time) {
+                for (int i = 0; i < _buyer_num; i++) {
+                    traders.emplace_back(true, false);
+                }
+                for (int i = 0; i < _seller_num; i++) {
+                    traders.emplace_back(false, true);
+                }
+                for (int i = 0; i < _both_num; i++) {
+                    traders.emplace_back(true, true);
+                }
+            }
+};
 
 class Trader {
     public:
@@ -244,10 +269,12 @@ class LimitOrderBook final {
             if (quantity == 0) {
                 cancel(id);
             } else if (orders.count(id)) {
+                LimitLevel* level = nullptr;
                 Order* to_update = orders.at(id);
                 std::map<int, LimitLevel*> *order_tree = _get_side(to_update->is_bid);
+
                 if (order_tree->count(to_update->price)) {
-                    LimitLevel* level = order_tree->at(to_update->price);
+                    level = order_tree->at(to_update->price);
                 } else {
                     return;
                 }
@@ -264,7 +291,7 @@ class LimitOrderBook final {
                     
                     to_update->quantity = quantity;
 
-                    level->append(to_update)
+                    level->append(to_update);
                 }
             }
         }
@@ -281,18 +308,40 @@ class LimitOrderBook final {
             return res;
         }
 
-        void run_experiment(int start_time, int end_time, std::vector<Trader> traders) {
-            for ( ; start_time < end_time; start_time++) {
-                for (auto& trader : traders) {
-                    if (trader.is_bidder) {
-                        std::pair<const int, const int> func_results = trader.get_order(true);
-                        bid(func_results.first, func_results.second, trader.id);
-                    } 
-                    
-                    if (trader.is_asker) {
-                        std::pair<const int, const int> func_results = trader.get_order(false);
-                        ask(func_results.first, func_results.second, trader.id);
-                    }
+        void run_experiment(std::vector<ExperimentWrapper*> experiments) {
+            // Shuffles the experiments order 
+            auto rng = std::default_random_engine {};
+            std::shuffle(std::begin(experiments), std::end(experiments), rng);
+
+            int cur_time = RAND_MAX;
+            int end_time = 0;
+
+            // Get earliest start and latest end
+            for (auto& experiment_ptr : experiments) {
+                if (experiment_ptr->start_time < cur_time) 
+                    cur_time = experiment_ptr->start_time;
+
+                if (experiment_ptr->end_time > end_time) 
+                    end_time = experiment_ptr->end_time;
+            }
+
+            for ( ; cur_time < end_time; cur_time++) {
+                for (auto& experiment_ptr : experiments) {
+                    if (experiment_ptr->start_time <= cur_time && experiment_ptr->end_time > end_time) {
+
+                        // Loop through all traders
+                        for (auto& trader : experiment_ptr->traders) {
+                            if (trader.is_bidder) {
+                                std::pair<const int, const int> func_results = trader.get_order(true);
+                                bid(func_results.first, func_results.second, trader.id);
+                            }
+
+                            if (trader.is_asker) {
+                                std::pair<const int, const int> func_results = trader.get_order(false);
+                                ask(func_results.first, func_results.second, trader.id);
+                            }
+                        }
+                    }   
                 }
             }
         }
