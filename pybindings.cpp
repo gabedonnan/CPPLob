@@ -8,7 +8,7 @@ namespace py = pybind11;
 
 PYBIND11_MODULE(BristolMatchingEngine, m) {
     py::class_<Trader>(m, "Trader")
-        .def(py::init<const bool, const bool>())
+        .def(py::init<const bool, const bool, const int, const int>())
         .def("get_order", &Trader::get_order)
         .def("get_order_quantity", &Trader::get_order_quantity)
         .def("get_order_price", &Trader::get_order_price)
@@ -31,15 +31,15 @@ PYBIND11_MODULE(BristolMatchingEngine, m) {
         .def("__getitem__", [](const std::vector<Trader> &v, const int idx) { return (idx > -1) ? v.at(idx) : v.at(v.size() + idx); }); 
 
 
-    py::class_<std::vector<Transaction>>(m, "TransactionVector")
-        .def(py::init<>())
-        .def("clear", &std::vector<Transaction>::clear)
-        .def("pop_back", &std::vector<Transaction>::pop_back)
-        .def("__len__", [](const std::vector<Transaction> &v) { return v.size(); })
-        .def("__iter__", [](std::vector<Transaction> &v) {
-            return py::make_iterator(v.begin(), v.end());
-        }, py::keep_alive<0, 1>())
-        .def("__getitem__", [](const std::vector<Transaction> &v, const int idx) { return (idx > -1) ? v.at(idx) : v.at(v.size() + idx); }); 
+    // py::class_<std::vector<Transaction>>(m, "TransactionVector")
+    //     .def(py::init<>())
+    //     .def("clear", &std::vector<Transaction>::clear)
+    //     .def("pop_back", &std::vector<Transaction>::pop_back)
+    //     .def("__len__", [](const std::vector<Transaction> &v) { return v.size(); })
+    //     .def("__iter__", [](std::vector<Transaction> &v) {
+    //         return py::make_iterator(v.begin(), v.end());
+    //     }, py::keep_alive<0, 1>())
+    //     .def("__getitem__", [](const std::vector<Transaction> &v, const int idx) { return (idx > -1) ? v.at(idx) : v.at(v.size() + idx); }); 
 
 
     py::class_<LimitOrderBook>(m, "LimitOrderBook")
@@ -69,13 +69,13 @@ PYBIND11_MODULE(BristolMatchingEngine, m) {
         .def("__str__", &LimitOrderBook::__repr__)
         .def("get_executed_transactions", [](const LimitOrderBook &lob) { return lob.executed_transactions; });
     
-    py::class_<Transaction>(m, "Transaction")
-        .def(py::init<const int, const int, const int, const int>())
-        .def_readonly("taker_id", &Transaction::taker_id)
-        .def_readonly("maker_id", &Transaction::maker_id)
-        .def_readonly("price", &Transaction::price)
-        .def_readonly("quantity", &Transaction::quantity)
-        .def("__repr__", &Transaction::to_str)
-        .def("__str__", &Transaction::to_str);
+    // py::class_<Transaction>(m, "Transaction")
+    //     .def(py::init<const int, const int, const int, const int>())
+    //     .def_readonly("taker_id", &Transaction::taker_id)
+    //     .def_readonly("maker_id", &Transaction::maker_id)
+    //     .def_readonly("price", &Transaction::price)
+    //     .def_readonly("quantity", &Transaction::quantity)
+    //     .def("__repr__", &Transaction::to_str)
+    //     .def("__str__", &Transaction::to_str);
 
 }
