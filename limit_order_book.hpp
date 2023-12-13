@@ -9,70 +9,18 @@
 #include <string>
 #include <random>
 #include <algorithm>
-
-static int _cur_tid = 0;
-
-class ExperimentWrapper {
-    public:
-        const int start_time;
-        const int end_time;
-};
-
-template <typename T>  // T here is a Trader or subclass of trader type
-class Experiment : public ExperimentWrapper {
-    public:
-        std::vector<T> traders;
-        Experiment(const int _start_time, const int _end_time, const int _buyer_num, const int _seller_num, const int _both_num) 
-            : start_time(_start_time), end_time(_end_time) {
-                for (int i = 0; i < _buyer_num; i++) {
-                    traders.emplace_back(true, false);
-                }
-                for (int i = 0; i < _seller_num; i++) {
-                    traders.emplace_back(false, true);
-                }
-                for (int i = 0; i < _both_num; i++) {
-                    traders.emplace_back(true, true);
-                }
-            }
-};
-
-class Trader {
-    public:
-        const bool is_bidder;
-        const bool is_asker;
-        const int id;
-
-        Trader(const bool _bids, const bool _asks) : is_bidder(_bids), is_asker(_asks), id(_cur_tid) {
-            _cur_tid++;
-        }
-
-        const int get_order_quantity(const bool is_bid) {
-            return 1;
-        }
-
-        const int get_order_price(const bool is_bid) {
-            return 1;
-        }
-
-        std::pair<const int, const int> get_order(const bool is_bid) {
-            return std::make_pair(get_order_quantity(is_bid), get_order_price(is_bid));
-        }
-
-        std::string to_str() {
-            return "Trader(id=" + std::to_string(id) + ", is_bidder=" + std::to_string(is_bidder) + ", is_asker=" + std::to_string(is_asker) + ")";
-        }
-};
-
+#include <fstream>
+#include <set>
 
 struct Transaction {
-    const int taker_id;
-    const int maker_id;
+    const Trader* taker_ptr;
+    const Trader* maker_ptr;
     const int quantity;
     const int price;
-    Transaction(const int _taker_id, const int _maker_id, const int _tx_quantity, const int _tx_price) 
-        : taker_id(_taker_id), maker_id(_maker_id), quantity(_tx_quantity), price(_tx_price) {}
+    Transaction(const Trader* _taker_ptr, const Trader* _maker_ptr, const int _tx_quantity, const int _tx_price) 
+        : taker_ptr(_taker_ptr), maker_ptr(_maker_ptr), quantity(_tx_quantity), price(_tx_price) {}
     std::string to_str() {
-        return "Transaction(maker_id=" + std::to_string(maker_id) + ", taker_id=" + std::to_string(taker_id) + ", quantity=" + std::to_string(quantity) + ", price=" + std::to_string(price) +  ")";
+        return "Transaction(maker_id=" + std::to_string(maker_ptr) + ", taker_id=" + std::to_string(taker_ptr) + ", quantity=" + std::to_string(quantity) + ", price=" + std::to_string(price) +  ")";
     }
 };
 
@@ -141,15 +89,25 @@ class LimitOrderBook final {
                 return;
             }
 
-            if (order != nullptr && order->quantity > 0) {
-                orders.insert(std::make_pair(order->id, order));  // Segfault here with map's at function
+            if (order != nullptr) {
+                if (order->quantity > 0 && order->order_type != OrderType::fill_and_kill) {
+                    orders.insert(std::make_pair(order->id, order));
+                    
+                    // Insert order id to trader's orders made
+                    if (order->trader_ptr != nullptr)
+                        order->trader_ptr->order_ids.insert(order->id);
 
-                if (order_tree->count(order->price)) {
-                    order_tree->at(order->price)->append(order);
+                    if (order_tree->count(order->price)) {
+                        order_tree->at(order->price)->append(order);
+                    } else {
+                        order_tree->insert(std::make_pair(order->price, new LimitLevel(order)));
+                    }
                 } else {
-                    order_tree->insert(std::make_pair(order->price, new LimitLevel(order)));
+                    // If order has zero quantity left or is fill and kill, delete it
+                    delete order;
                 }
             }
+
         }
 
         void _match_orders(Order *order, LimitLevel *best_value) {
@@ -162,13 +120,11 @@ class LimitOrderBook final {
                 Order* head_order = best_value->get_head();
 
                 if (order->quantity <= head_order->quantity) {
-                    executed_transactions.push_back({order->trader_id, head_order->trader_id, order->quantity, head_order->price});
                     // Decrementing quantities
                     head_order->quantity -= order->quantity;
                     best_value->quantity -= order->quantity;
                     order->quantity = 0;
                 } else {
-                    executed_transactions.push_back({order->trader_id, head_order->trader_id, head_order->quantity, head_order->price});
                     // Decrementing quantities
                     order->quantity -= head_order->quantity;
                     best_value->quantity -= head_order->quantity;
@@ -176,12 +132,25 @@ class LimitOrderBook final {
                 }
 
                 if (order->quantity == 0 && orders.count(order->id)) {
+                    if (head_order->trader_ptr != nullptr)
+                        head_order->trader_ptr->order_ids.erase(head_order->id);
+
                     cancel(order->id);
                 }
                 
                 if (head_order->quantity == 0) {
                     orders.erase(head_order->id);
-                    delete best_value->pop_left();  // Deletes head order as it is popped
+                    // We pop this order now so potential iceberg orders wont match
+                    Order* popped_order = best_value->pop_left();
+                    // Enact the new orders from the iceberg
+                    if (head_order->order_type == OrderType::iceberg) {
+                        if (head_order->is_bid) {
+                            bid(head_order->alternate_quantity, head_order->alternate_price, OrderType::limit);
+                        } else {
+                            ask(head_order->alternate_quantity, head_order->alternate_price, OrderType::limit);
+                        }
+                    }
+                    delete popped_order;  // Deletes head order as it is popped
                 }
 
                 if (best_value->quantity == 0) {    
@@ -198,8 +167,6 @@ class LimitOrderBook final {
         }
 
     public:
-        std::vector<Transaction> executed_transactions; 
-
         LimitOrderBook() {}
 
         inline LimitLevel* get_best_ask() {
@@ -234,16 +201,19 @@ class LimitOrderBook final {
                         delete price_level;
                     }
                 }
+                if (current_order->trader_ptr != nullptr)
+                    current_order->trader_ptr->order_ids.erase(current_order->id);
+
                 delete current_order;
                 orders.erase(id);
             }
         }
 
-        inline int bid(int quantity, const int price, const int trader_id = 0) {
-            if (price > 0 && quantity > 0) {
-                Order *order = new Order(true, quantity, price, order_id, trader_id);
+        inline int bid(int quantity, const int price, const OrderType order_type) {
+            if (price >= 0 && quantity > 0) {
+                Order *order = new Order(true, quantity, price, order_id, order_type);
                 int _oid = order_id;  // Save order id from order
-                order_id += 1;
+                order_id++;
 
                 _add_order(order);
                 return _oid;  // Dont return order->id in case it has been deleted
@@ -252,16 +222,68 @@ class LimitOrderBook final {
             }
         }
 
-        inline int ask(int quantity, const int price, const int trader_id = 0) {
-            if (price > 0 && quantity > 0) {
-                Order *order = new Order(false, quantity, price, order_id, trader_id);
+        inline int market_bid(int quantity) {
+            if (quantity > 0) {
+                Order *order = new Order(true, quantity, INT64_MAX, order_id, OrderType::market);
+                int _oid = order_id;
+                order_id++;
+
+                _add_order(order);
+                return _oid;
+            } else {
+                return -1;
+            }
+        }
+
+        inline int iceberg_bid(int quantity, const int price, int alternate_quantity) {
+            if (quantity > 0) {
+                Order *order = new Order(true, quantity, price, order_id, OrderType::iceberg, alternate_quantity, price);
+                int _oid = order_id;
+                order_id++;
+
+                _add_order(order);
+                return _oid;
+            } else {
+                return -1;
+            }
+        }
+
+        inline int ask(int quantity, const int price, const OrderType order_type) {
+            if (price >= 0 && quantity > 0) {
+                Order *order = new Order(false, quantity, price, order_id, order_type);
                 int _oid = order_id;  // Save order id from order
-                order_id += 1;
+                order_id++;
 
                 _add_order(order);
                 return _oid;  // Dont return order->id in case it has been deleted
             } else {
                 return -1;  // Returns -1 if invalid order
+            }
+        }
+
+        inline int market_ask(int quantity) {
+            if (quantity > 0) {
+                Order *order = new Order(false, quantity, 0, order_id, OrderType::market);
+                int _oid = order_id;
+                order_id++;
+
+                _add_order(order);
+                return _oid;
+            } else {
+                return -1;
+            }
+        }
+
+        inline int iceberg_ask(int quantity, const int price, int alternate_quantity) {
+            if (quantity > 0) {
+                Order *order = new Order(false, quantity, price, order_id, OrderType::iceberg, alternate_quantity, price);
+                int _oid = order_id;
+                order_id++;
+
+                _add_order(order);
+                return _oid;
+            } else {
+                return -1;
             }
         }
 
@@ -306,44 +328,6 @@ class LimitOrderBook final {
                 res += std::to_string(val->quantity) + " asks at price " + std::to_string(key) + "\n";
             }
             return res;
-        }
-
-        void run_experiment(std::vector<ExperimentWrapper*> experiments) {
-            // Shuffles the experiments order 
-            auto rng = std::default_random_engine {};
-            std::shuffle(std::begin(experiments), std::end(experiments), rng);
-
-            int cur_time = RAND_MAX;
-            int end_time = 0;
-
-            // Get earliest start and latest end
-            for (auto& experiment_ptr : experiments) {
-                if (experiment_ptr->start_time < cur_time) 
-                    cur_time = experiment_ptr->start_time;
-
-                if (experiment_ptr->end_time > end_time) 
-                    end_time = experiment_ptr->end_time;
-            }
-
-            for ( ; cur_time < end_time; cur_time++) {
-                for (auto& experiment_ptr : experiments) {
-                    if (experiment_ptr->start_time <= cur_time && experiment_ptr->end_time > end_time) {
-
-                        // Loop through all traders
-                        for (auto& trader : experiment_ptr->traders) {
-                            if (trader.is_bidder) {
-                                std::pair<const int, const int> func_results = trader.get_order(true);
-                                bid(func_results.first, func_results.second, trader.id);
-                            }
-
-                            if (trader.is_asker) {
-                                std::pair<const int, const int> func_results = trader.get_order(false);
-                                ask(func_results.first, func_results.second, trader.id);
-                            }
-                        }
-                    }   
-                }
-            }
         }
 };
 
