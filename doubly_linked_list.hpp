@@ -1,8 +1,6 @@
 #ifndef DOUBLY_LINKED_LIST_H
 #define DOUBLY_LINKED_LIST_H
 
-static int _cur_tid = 0;
-
 enum class OrderType {
     limit,
     fill_and_kill,
@@ -15,10 +13,11 @@ struct Order final {
     const int price;
     const int id;
     const OrderType order_type;
+    const int trader_id;
     Order *prev;
     Order *next;
-    Order (const bool _is_bid, int _quantity, const int _price, const int _id, const OrderType _order_type) 
-        : is_bid(_is_bid), quantity(_quantity), price(_price), id(_id), order_type(_order_type), prev(nullptr), next(nullptr) {}
+    Order (const bool _is_bid, int _quantity, const int _price, const int _id, const OrderType _order_type, const int _trader_id) 
+        : is_bid(_is_bid), quantity(_quantity), price(_price), id(_id), order_type(_order_type), prev(nullptr), next(nullptr), trader_id(_trader_id) {}
 };
 
 class DoublyLinkedList {

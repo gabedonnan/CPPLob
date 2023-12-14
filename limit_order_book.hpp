@@ -8,6 +8,19 @@
 #include <vector>
 #include <string>
 
+struct Transaction {
+    const int trader_one;
+    const int trader_two;
+    const int price;
+    const int quantity;
+
+    Transaction (const int _trader_one, const int _trader_two, const int _price, const int _quantity)
+        : trader_one(_trader_one), trader_two(_trader_two), price(_price), quantity(_quantity) {}
+
+    std::string to_str() {
+        return "Transaction(maker_id=" + std::to_string(trader_one) + ", taker_id=" + std::to_string(trader_two) + ", quantity=" + std::to_string(quantity) + ", price=" + std::to_string(price) +  ")";
+    }
+};
 
 class LimitLevel final {
     public:
@@ -101,11 +114,13 @@ class LimitOrderBook final {
                 Order* head_order = best_value->get_head();
 
                 if (order->quantity <= head_order->quantity) {
+                    executed_transactions.push_back({order->trader_id, head_order->trader_id, order->quantity, head_order->price});
                     // Decrementing quantities
                     head_order->quantity -= order->quantity;
                     best_value->quantity -= order->quantity;
                     order->quantity = 0;
                 } else {
+                    executed_transactions.push_back({order->trader_id, head_order->trader_id, head_order->quantity, head_order->price});
                     // Decrementing quantities
                     order->quantity -= head_order->quantity;
                     best_value->quantity -= head_order->quantity;
@@ -135,6 +150,8 @@ class LimitOrderBook final {
         }
 
     public:
+        std::vector<Transaction> executed_transactions;
+
         LimitOrderBook() {}
 
         inline LimitLevel* get_best_ask() {
@@ -175,9 +192,9 @@ class LimitOrderBook final {
             }
         }
 
-        inline int bid(int quantity, const int price, const OrderType order_type) {
+        inline int bid(int quantity, const int price, const OrderType order_type, const int trader_id) {
             if (price >= 0 && quantity > 0) {
-                Order *order = new Order(true, quantity, price, order_id, order_type);
+                Order *order = new Order(true, quantity, price, order_id, order_type, trader_id);
                 int _oid = order_id;  // Save order id from order
                 order_id++;
 
@@ -188,9 +205,9 @@ class LimitOrderBook final {
             }
         }
 
-        inline int market_bid(int quantity) {
+        inline int market_bid(int quantity, const int trader_id) {
             if (quantity > 0) {
-                Order *order = new Order(true, quantity, INT32_MAX, order_id, OrderType::market);
+                Order *order = new Order(true, quantity, INT32_MAX, order_id, OrderType::market, trader_id);
                 int _oid = order_id;
                 order_id++;
 
@@ -201,9 +218,9 @@ class LimitOrderBook final {
             }
         }
 
-        inline int ask(int quantity, const int price, const OrderType order_type) {
+        inline int ask(int quantity, const int price, const OrderType order_type, const int trader_id) {
             if (price >= 0 && quantity > 0) {
-                Order *order = new Order(false, quantity, price, order_id, order_type);
+                Order *order = new Order(false, quantity, price, order_id, order_type, trader_id);
                 int _oid = order_id;  // Save order id from order
                 order_id++;
 
@@ -214,9 +231,9 @@ class LimitOrderBook final {
             }
         }
 
-        inline int market_ask(int quantity) {
+        inline int market_ask(int quantity, const int trader_id) {
             if (quantity > 0) {
-                Order *order = new Order(false, quantity, 0, order_id, OrderType::market);
+                Order *order = new Order(false, quantity, 0, order_id, OrderType::market, trader_id);
                 int _oid = order_id;
                 order_id++;
 
@@ -256,6 +273,10 @@ class LimitOrderBook final {
                     level->append(to_update);
                 }
             }
+        }
+
+        inline void clear_transactions() {
+            executed_transactions.clear();
         }
 
         std::string __repr__() {
