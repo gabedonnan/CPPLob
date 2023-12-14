@@ -7,40 +7,11 @@
 namespace py = pybind11;
 
 PYBIND11_MODULE(BristolMatchingEngine, m) {
-    py::class_<Trader>(m, "Trader")
-        .def(py::init<const bool, const bool, const int, const int>())
-        .def("get_order", &Trader::get_order)
-        .def("get_order_quantity", &Trader::get_order_quantity)
-        .def("get_order_price", &Trader::get_order_price)
-        .def_readonly("id", &Trader::id)
-        .def_readonly("is_bidder", &Trader::is_bidder)
-        .def_readonly("is_asker", &Trader::is_asker)
-        .def("__repr__", &Trader::to_str)
-        .def("__str__", &Trader::to_str);
-
-
-    py::class_<std::vector<Trader>>(m, "TraderVector")
-        .def(py::init<>())
-        .def("clear", &std::vector<Trader>::clear)
-        .def("pop_back", &std::vector<Trader>::pop_back)
-        .def("append", [](std::vector<Trader> &v, Trader &t) { v.push_back(t); })
-        .def("__len__", [](const std::vector<Trader> &v) { return v.size(); })
-        .def("__iter__", [](std::vector<Trader> &v) {
-            return py::make_iterator(v.begin(), v.end());
-        }, py::keep_alive<0, 1>())
-        .def("__getitem__", [](const std::vector<Trader> &v, const int idx) { return (idx > -1) ? v.at(idx) : v.at(v.size() + idx); }); 
-
-
-    // py::class_<std::vector<Transaction>>(m, "TransactionVector")
-    //     .def(py::init<>())
-    //     .def("clear", &std::vector<Transaction>::clear)
-    //     .def("pop_back", &std::vector<Transaction>::pop_back)
-    //     .def("__len__", [](const std::vector<Transaction> &v) { return v.size(); })
-    //     .def("__iter__", [](std::vector<Transaction> &v) {
-    //         return py::make_iterator(v.begin(), v.end());
-    //     }, py::keep_alive<0, 1>())
-    //     .def("__getitem__", [](const std::vector<Transaction> &v, const int idx) { return (idx > -1) ? v.at(idx) : v.at(v.size() + idx); }); 
-
+    py::enum_<OrderType>(m, "OrderType")
+        .value("limit", OrderType::limit)
+        .value("fill_and_kill", OrderType::fill_and_kill)
+        .value("market", OrderType::market)
+        .export_values();
 
     py::class_<LimitOrderBook>(m, "LimitOrderBook")
         .def(py::init<>())
@@ -52,7 +23,7 @@ PYBIND11_MODULE(BristolMatchingEngine, m) {
             "Creates a bid (buy order) on the limit order book from the specified trader at specified quantity and price.\nReturns assigned order id.", 
             py::arg("quantity"),
             py::arg("price"),
-            py::arg("trader_id")=0
+            py::arg("order_type")
             )
         .def(
             "ask", 
@@ -60,14 +31,24 @@ PYBIND11_MODULE(BristolMatchingEngine, m) {
             "Creates an ask (sell order) on the limit order book from the specified trader at specified quantity and price.\nReturns assigned order id.", 
             py::arg("quantity"),
             py::arg("price"),
-            py::arg("trader_id")=0
+            py::arg("order_type")
             )
+        .def(
+            "market_bid",
+            &LimitOrderBook::market_bid,
+            "Buys n quantity at the best prices available on the LimitOrderBook",
+            py::arg("quantity")
+        )
+        .def(
+            "market_ask",
+            &LimitOrderBook::market_ask,
+            "Sells n quantity at the best prices available on the LimitOrderBook",
+            py::arg("quantity")
+        )
         .def("cancel", &LimitOrderBook::cancel)
         .def("update", &LimitOrderBook::update)
-        .def("run_experiment", &LimitOrderBook::run_experiment)
         .def("__repr__", &LimitOrderBook::__repr__)
-        .def("__str__", &LimitOrderBook::__repr__)
-        .def("get_executed_transactions", [](const LimitOrderBook &lob) { return lob.executed_transactions; });
+        .def("__str__", &LimitOrderBook::__repr__);
     
     // py::class_<Transaction>(m, "Transaction")
     //     .def(py::init<const int, const int, const int, const int>())

@@ -7,22 +7,6 @@
 #include <iostream>
 #include <vector>
 #include <string>
-#include <random>
-#include <algorithm>
-#include <fstream>
-#include <set>
-
-struct Transaction {
-    const Trader* taker_ptr;
-    const Trader* maker_ptr;
-    const int quantity;
-    const int price;
-    Transaction(const Trader* _taker_ptr, const Trader* _maker_ptr, const int _tx_quantity, const int _tx_price) 
-        : taker_ptr(_taker_ptr), maker_ptr(_maker_ptr), quantity(_tx_quantity), price(_tx_price) {}
-    std::string to_str() {
-        return "Transaction(maker_id=" + std::to_string(maker_ptr) + ", taker_id=" + std::to_string(taker_ptr) + ", quantity=" + std::to_string(quantity) + ", price=" + std::to_string(price) +  ")";
-    }
-};
 
 
 class LimitLevel final {
@@ -94,9 +78,6 @@ class LimitOrderBook final {
                     orders.insert(std::make_pair(order->id, order));
                     
                     // Insert order id to trader's orders made
-                    if (order->trader_ptr != nullptr)
-                        order->trader_ptr->order_ids.insert(order->id);
-
                     if (order_tree->count(order->price)) {
                         order_tree->at(order->price)->append(order);
                     } else {
@@ -132,25 +113,12 @@ class LimitOrderBook final {
                 }
 
                 if (order->quantity == 0 && orders.count(order->id)) {
-                    if (head_order->trader_ptr != nullptr)
-                        head_order->trader_ptr->order_ids.erase(head_order->id);
-
                     cancel(order->id);
                 }
                 
                 if (head_order->quantity == 0) {
                     orders.erase(head_order->id);
-                    // We pop this order now so potential iceberg orders wont match
-                    Order* popped_order = best_value->pop_left();
-                    // Enact the new orders from the iceberg
-                    if (head_order->order_type == OrderType::iceberg) {
-                        if (head_order->is_bid) {
-                            bid(head_order->alternate_quantity, head_order->alternate_price, OrderType::limit);
-                        } else {
-                            ask(head_order->alternate_quantity, head_order->alternate_price, OrderType::limit);
-                        }
-                    }
-                    delete popped_order;  // Deletes head order as it is popped
+                    delete best_value->pop_left();  // Deletes head order as it is popped
                 }
 
                 if (best_value->quantity == 0) {    
@@ -201,8 +169,6 @@ class LimitOrderBook final {
                         delete price_level;
                     }
                 }
-                if (current_order->trader_ptr != nullptr)
-                    current_order->trader_ptr->order_ids.erase(current_order->id);
 
                 delete current_order;
                 orders.erase(id);
@@ -224,20 +190,7 @@ class LimitOrderBook final {
 
         inline int market_bid(int quantity) {
             if (quantity > 0) {
-                Order *order = new Order(true, quantity, INT64_MAX, order_id, OrderType::market);
-                int _oid = order_id;
-                order_id++;
-
-                _add_order(order);
-                return _oid;
-            } else {
-                return -1;
-            }
-        }
-
-        inline int iceberg_bid(int quantity, const int price, int alternate_quantity) {
-            if (quantity > 0) {
-                Order *order = new Order(true, quantity, price, order_id, OrderType::iceberg, alternate_quantity, price);
+                Order *order = new Order(true, quantity, INT32_MAX, order_id, OrderType::market);
                 int _oid = order_id;
                 order_id++;
 
@@ -264,19 +217,6 @@ class LimitOrderBook final {
         inline int market_ask(int quantity) {
             if (quantity > 0) {
                 Order *order = new Order(false, quantity, 0, order_id, OrderType::market);
-                int _oid = order_id;
-                order_id++;
-
-                _add_order(order);
-                return _oid;
-            } else {
-                return -1;
-            }
-        }
-
-        inline int iceberg_ask(int quantity, const int price, int alternate_quantity) {
-            if (quantity > 0) {
-                Order *order = new Order(false, quantity, price, order_id, OrderType::iceberg, alternate_quantity, price);
                 int _oid = order_id;
                 order_id++;
 
