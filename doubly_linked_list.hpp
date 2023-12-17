@@ -5,6 +5,8 @@ enum class OrderType {
     limit,
     fill_and_kill,
     market,
+    immediate_or_cancel,
+    post_only
 };
 
 struct Order final {

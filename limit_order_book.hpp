@@ -128,7 +128,7 @@ class LimitOrderBook final {
                 }
 
                 if (order->quantity == 0 && orders.count(order->id)) {
-                    cancel(order->id);
+                    cancel(order->id, order->trader_id);
                 }
                 
                 if (head_order->quantity == 0) {
@@ -170,8 +170,8 @@ class LimitOrderBook final {
             }
         }
 
-        inline void cancel(int id) {
-            if (orders.count(id)) {
+        inline void cancel(int id, const int trader_id) {
+            if (orders.count(id) && orders.at(id)->trader_id == trader_id) {
                 Order* current_order = orders.at(id);
                 std::map<int, LimitLevel*> *order_tree = _get_side(current_order->is_bid);
                 
@@ -244,10 +244,11 @@ class LimitOrderBook final {
             }
         }
 
-        inline void update(int id, int quantity) {
+        inline void update(int id, int quantity, const int trader_id) {
             if (quantity == 0) {
-                cancel(id);
-            } else if (orders.count(id)) {
+                // Cancel function checks by itself whether order id works
+                cancel(id, trader_id);
+            } else if (orders.count(id) && orders.at(id)->trader_id == trader_id) {
                 LimitLevel* level = nullptr;
                 Order* to_update = orders.at(id);
                 std::map<int, LimitLevel*> *order_tree = _get_side(to_update->is_bid);
