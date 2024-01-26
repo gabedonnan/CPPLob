@@ -12,7 +12,6 @@
 #include <thread>
 #include <vector>
 #include <cinttypes>
-#include <alloca.h>
 #include "limit_order_book.hpp"
 #include <disruptorplus/ring_buffer.hpp>
 #include <disruptorplus/single_threaded_claim_strategy.hpp>
@@ -281,6 +280,15 @@ void consumer(
 
 
 int main() {
+    const size_t buffer_size = 2048; // Must be power-of-two
+    
+    disruptorplus::ring_buffer<Event> buffer(buffer_size);
+    
+    disruptorplus::spin_wait_strategy wait_strategy;
+    disruptorplus::multi_threaded_claim_strategy<disruptorplus::spin_wait_strategy> claim_strategy(buffer_size, wait_strategy);
+    disruptorplus::sequence_barrier<disruptorplus::spin_wait_strategy> consumed(wait_strategy);
+    claim_strategy.add_claim_barrier(consumed);
+
     auto const address = net::ip::make_address("0.0.0.0");
     const unsigned short port = 8080;
     const int threads = 4;  // Number of threads
@@ -298,7 +306,14 @@ int main() {
         {
             ioc.run();
         });
+
+    std::thread consumer(
+        consumer, 
+        (std::ref(buffer), std::ref(wait_strategy), std::ref(claim_strategy), std::ref(consumed))
+    );
+
     ioc.run();
+    consumer.join();
 
     return 0;
 }
