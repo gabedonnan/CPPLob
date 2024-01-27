@@ -280,7 +280,7 @@ void consumer(
 
 
 int main() {
-    const size_t buffer_size = 2048; // Must be power-of-two
+    const size_t buffer_size = 8192; // Must be power-of-two, set higher for higher throughput
     
     disruptorplus::ring_buffer<Event> buffer(buffer_size);
     
@@ -291,7 +291,7 @@ int main() {
 
     auto const address = net::ip::make_address("0.0.0.0");
     const unsigned short port = 8080;
-    const int threads = 4;  // Number of threads
+    const int threads = 8;  // Number of threads
 
     net::io_context ioc{threads};
 
@@ -307,10 +307,7 @@ int main() {
             ioc.run();
         });
 
-    std::thread consumer(
-        consumer, 
-        (std::ref(buffer), std::ref(wait_strategy), std::ref(claim_strategy), std::ref(consumed))
-    );
+    std::thread consumer(consumer, std::ref(buffer), std::ref(wait_strategy), std::ref(claim_strategy), std::ref(consumed));
 
     ioc.run();
     consumer.join();
@@ -320,21 +317,21 @@ int main() {
 
 
 // switch (order_type_id) {
-            //     case 0:
-            //         order_type = OrderType.limit;
-            //         break;
-            //     case 1:
-            //         order_type = OrderType.fill_and_kill;
-            //         break;
-            //     case 2:
-            //         order_type = OrderType.market;
-            //         break;
-            //     case 3:
-            //         order_type = OrderType.immediate_or_cancel;
-            //         break;
-            //     case 4:
-            //         order_type = OrderType.post_only;
-            //         break;
-            //     default:
-            //         order_type = OrderType.limit;
-            // }
+//     case 0:
+//         order_type = OrderType.limit;
+//         break;
+//     case 1:
+//         order_type = OrderType.fill_and_kill;
+//         break;
+//     case 2:
+//         order_type = OrderType.market;
+//         break;
+//     case 3:
+//         order_type = OrderType.immediate_or_cancel;
+//         break;
+//     case 4:
+//         order_type = OrderType.post_only;
+//         break;
+//     default:
+//         order_type = OrderType.limit;
+// }
